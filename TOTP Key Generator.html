@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>TOTP Key Generator</title>
+
+	<!-- https://picturepan2.github.io/spectre/index.html -->
+	<link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre.min.css">
+	<style type="text/css" media="screen">
+		.monospace {
+			font-family: "SF Mono", "Segoe UI Mono", "Roboto Mono", Menlo, Courier, monospace;
+			font-size: 0.9em;
+		}
+	</style>
+	<script>
+	var SECRET_LENGTH = 16;
+	var empty_pixel = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+	
+	window.onload = function() {
+		e_service    = document.getElementById("service");
+		e_user       = document.getElementById("user");
+		e_secret     = document.getElementById("secret");
+		e_secret_err = document.getElementById("secret-error");
+		
+		e_hexarray   = document.getElementById("hexarray");
+		e_ga_code    = document.getElementById("ga_code");
+		e_qr_code    = document.getElementById("qr_code");
+		
+		e_secret.setAttribute("maxlength", SECRET_LENGTH);
+		e_qr_code.src = empty_pixel;
+	}
+
+	function generate() {
+		
+		// Input validation
+		var service = e_service.value;
+		if (service == '') service = e_service.placeholder;
+
+		var user = e_user.value;
+		if (user == '') user = e_user.placeholder;
+		
+		var secret = e_secret.value;
+		if (secret.length != SECRET_LENGTH) {
+			e_secret.classList.add("is-error");
+			e_secret_err.classList.remove("d-hide");
+			e_secret_err.innerHTML = "Secret must have " + SECRET_LENGTH + " characters.";
+			reset_form_output();
+			return;
+		} else {
+			e_secret.classList.remove("is-error");
+			e_secret_err.classList.add("d-hide");
+		}
+		
+		// Encode secret
+		e_hexarray.value = get_hex_array(secret);
+		e_ga_code.value = b32encode(secret);
+		
+		// Create TOTP URI
+		// https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+		var uri = 'otpauth://totp/' + user + '?secret=' + b32encode(secret) + '&issuer=' + service;
+		//console.log(uri);
+		
+		// Get QRCode
+		// https://developers.google.com/chart/infographics/docs/qr_codes
+		var imgsrc = 'https://chart.googleapis.com/chart?cht=qr&chs=200x200&chld=M|0&chl=' + encodeURIComponent(uri);
+		e_qr_code.title = uri;
+		e_qr_code.src = imgsrc;
+	}
+	
+	function reset_form_output() {
+		document.getElementById("hexarray").value = "";
+		e_ga_code.value = "";
+		e_qr_code.title = "";
+		e_qr_code.src = empty_pixel;
+	}
+	
+	function get_hex_array(s) {
+		var char_array = s.split('');
+		var charcode_array = char_array.map(function (c) { return c.charCodeAt(0); });
+		var hex_array = '{';
+		for(i = 0; i < charcode_array.length; i++) {
+			if(i > 0) hex_array += ', ';
+			hex_array += '0x' + charcode_array[i].toString(16);
+		}
+		hex_array += '}';
+		
+		return hex_array;		
+	}
+
+	function b32encode(s) {
+
+	/* encodes a string s to base32 and returns the encoded string */
+		var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+		var parts = [];
+		var quanta= Math.floor((s.length / 5));
+		var leftover = s.length % 5;
+
+		if (leftover != 0) {
+		for (var i = 0; i < (5-leftover); i++) { s += '\x00'; }
+		quanta += 1;
+		}
+	 
+		for (i = 0; i < quanta; i++) {
+			parts.push(alphabet.charAt(s.charCodeAt(i*5) >> 3));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5) & 0x07) << 2)
+									   | (s.charCodeAt(i*5+1) >> 6)));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5+1) & 0x3F) >> 1) ));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5+1) & 0x01) << 4)
+									   | (s.charCodeAt(i*5+2) >> 4)));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5+2) & 0x0F) << 1)
+									   | (s.charCodeAt(i*5+3) >> 7)));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5+3) & 0x7F) >> 2)));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5+3) & 0x03) << 3)
+									   | (s.charCodeAt(i*5+4) >> 5)));
+			parts.push(alphabet.charAt( ((s.charCodeAt(i*5+4) & 0x1F) )));
+		}
+
+		var replace = 0;
+		if (leftover == 1) replace = 6;
+		else if (leftover == 2) replace = 4;
+		else if (leftover == 3) replace = 3;
+		else if (leftover == 4) replace = 1;
+
+		for (i = 0; i < replace; i++) parts.pop();
+		// Padding specified in RFC 3548 section 2.2 is not required and should be omitted.
+		//for (i = 0; i < replace; i++) parts.push("=");
+
+		return parts.join("");
+	}
+	</script>
+</head>
+
+<body>
+	<div class="container">
+		<div class="columns">
+			<div class="column col-1 col-ml-auto"></div>
+			<div class="column col-8">
+				<h2 class="mt-2 mb-2">TOTP Key Generator</h2>
+			
+				<div class="divider"></div>
+
+				<div class="form-horizontal">
+					<div class="form-group">
+						<div class="col-5 col-mr-auto">
+							<label class="form-label" for="service">Service</label>
+							<input class="form-input" type="text" id="service" placeholder="Arduino">
+						</div>
+						<div class="col-6">
+							<label class="form-label" for="user">User</label>
+							<input class="form-input" type="text" id="user" placeholder="Anonymous">
+						</div>
+					</div>
+				</div>
+
+				<div class="form-group">
+					<label class="form-label" for="secret">Secret</label>
+					<input class="form-input monospace" type="text" id="secret" onkeydown="if (event.keyCode == 13) generate();">
+					<p class="d-hide form-input-hint" id="secret-error"></p>
+				</div>
+			
+				<button class="btn mt-2 mb-2" onclick="generate()">Generate</button>
+			
+				<div class="divider"></div>
+
+				<div class="form-group">
+					<label class="form-label" for="hexarray">Arduino HEX Array</label>
+					<input class="form-input monospace" type="text" id="hexarray" disabled="disabled">
+				</div>
+			
+				<div class="form-group">
+					<label class="form-label" for="ga_code">Google Authenticator</label>
+					<input class="form-input monospace" type="text" id="ga_code" disabled="disabled">
+				</div>
+
+				<div class="form-group">
+					<img style="margin-left: -8px;" id="qr_code" alt="qrcode" src="">
+				</div>
+			</div>
+			<div class="column col-1 col-ml-auto"></div>
+		</div>
+	</div>
+</body>
+</html>
